@@ -1,95 +1,74 @@
 package handlers
 
 import (
-	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/http"
-	"strconv"
 	"strings"
-	"sync"
-
-	"cooking-bot/config"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api"
 	"go.uber.org/zap"
 )
 
-type Request struct {
-	Title       string         `json:"title,omitempty"`
-	Ingredients map[string]int `json:"ingredients,omitempty"`
-	RecipeText  string         `json:"recipe_text,omitempty"`
+// Response описывает структуру данных, получаемых от API
+type Response struct {
+	ID          int            `json:"id"`
+	Title       string         `json:"title"`
+	Ingredients map[string]int `json:"ingredients"`
+	RecipeText  string         `json:"recipe_text"`
 }
 
-type UserState struct {
-	Step        int
-	Recipe      Request
-	CurrentIngr string
-}
+// GetHandler обрабатывает команду /get, получает список рецептов и отправляет пользователю
+func GetHandler(bot *tgbotapi.BotAPI, update tgbotapi.Update, logger *zap.Logger) {
+	apiURL := "http://localhost:8080/api/recipes/all/"
 
-var (
-	userStates = make(map[int64]*UserState)
-	mu         sync.Mutex
-)
+	// Отправляем GET-запрос
+	resp, err := http.Get(apiURL)
+	if err != nil {
+		logger.Error("Ошибка при запросе к API", zap.Error(err))
+		msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Произошла ошибка при получении рецептов 😢")
+		bot.Send(msg)
+		return
+	}
+	defer resp.Body.Close()
 
-func AA(bot *tgbotapi.BotAPI, update tgbotapi.Update, cfg *config.Config, logger *zap.Logger) {
-	if update.Message == nil {
+	// Декодируем JSON-ответ
+	var recipes []Response
+	if err := json.NewDecoder(resp.Body).Decode(&recipes); err != nil {
+		logger.Error("Ошибка при декодировании JSON", zap.Error(err))
+		msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Ошибка при обработке данных 😢")
+		bot.Send(msg)
 		return
 	}
 
-	chatID := update.Message.Chat.ID
-	text := update.Message.Text
-
-	mu.Lock()
-	state, exists := userStates[chatID]
-	if !exists {
-		state = &UserState{Step: 0, Recipe: Request{Ingredients: make(map[string]int)}}
-		userStates[chatID] = state
+	// Если рецептов нет
+	if len(recipes) == 0 {
+		msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Рецептов пока нет 😕")
+		bot.Send(msg)
+		return
 	}
-	mu.Unlock()
 
-	switch state.Step {
-	case 0:
-		// Шаг 1: Получаем название рецепта
-		state.Recipe.Title = text
-		state.Step++
-		bot.Send(tgbotapi.NewMessage(chatID, "Введите ингредиенты в формате: Название - Количество. Когда закончите, напишите 'готово'"))
-
-	case 1:
-		// Шаг 2: Получаем ингредиенты
-		if strings.ToLower(text) == "готово" {
-			state.Step++
-			bot.Send(tgbotapi.NewMessage(chatID, "Введите текст рецепта"))
-		} else {
-			parts := strings.SplitN(text, " - ", 2)
-			if len(parts) != 2 {
-				bot.Send(tgbotapi.NewMessage(chatID, "Ошибка формата. Введите в виде 'Название - Количество'"))
-				return
-			}
-			amount, err := strconv.Atoi(parts[1])
-			if err != nil {
-				bot.Send(tgbotapi.NewMessage(chatID, "Ошибка: количество должно быть числом"))
-				return
-			}
-			state.Recipe.Ingredients[parts[0]] = amount
-			bot.Send(tgbotapi.NewMessage(chatID, "Добавлено! Введите следующий ингредиент или 'готово'"))
+	// Формируем ответное сообщение
+	var messages []string
+	for _, recipe := range recipes {
+		ingredients := make([]string, 0, len(recipe.Ingredients))
+		for name, quantity := range recipe.Ingredients {
+			ingredients = append(ingredients, fmt.Sprintf("- %s: %d", name, quantity))
 		}
 
-	case 2:
-		// Шаг 3: Получаем текст рецепта
-		state.Recipe.RecipeText = text
-		body, _ := json.Marshal(state.Recipe)
+		message := fmt.Sprintf(
+			"🍽 *%s*\n\n📋 *Ингредиенты:*\n%s\n\n📝 *Рецепт:*\n%s",
+			recipe.Title,
+			strings.Join(ingredients, "\n"),
+			recipe.RecipeText,
+		)
+		messages = append(messages, message)
+	}
 
-		resp, err := http.Post(cfg.BackendURL, "application/json", bytes.NewBuffer(body))
-		if err != nil {
-			logger.Error("Ошибка запроса к бэкенду", zap.Error(err))
-			bot.Send(tgbotapi.NewMessage(chatID, "Ошибка соединения с сервером"))
-			return
-		}
-		defer resp.Body.Close()
-
-		bot.Send(tgbotapi.NewMessage(chatID, "Рецепт успешно добавлен"))
-		mu.Lock()
-		delete(userStates, chatID)
-		mu.Unlock()
+	// Отправляем рецепты (по отдельности, чтобы избежать ограничения по длине)
+	for _, msgText := range messages {
+		msg := tgbotapi.NewMessage(update.Message.Chat.ID, msgText)
+		msg.ParseMode = "Markdown"
+		bot.Send(msg)
 	}
 }

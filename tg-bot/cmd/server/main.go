@@ -32,8 +32,8 @@ func main() {
 			switch update.Message.Command() {
 			case "start":
 				handlers.StartHandler(bot, update, logger)
-			case "create":
-				handlers.AA(bot, update, cfg, logger)
+			case "get":
+				handlers.GetHandler(bot, update, logger)
 			case "questions":
 				handlers.QuestionsHandler(bot, update, logger)
 			case "help":
