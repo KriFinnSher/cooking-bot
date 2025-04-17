@@ -26,7 +26,7 @@ func GetHandler(bot *tgbotapi.BotAPI, update tgbotapi.Update, logger *zap.Logger
 	resp, err := http.Get(apiURL)
 	if err != nil {
 		logger.Error("Ошибка при запросе к API", zap.Error(err))
-		msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Произошла ошибка при получении рецептов 😢")
+		msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Произошла ошибка при получении маршрутов 😢")
 		bot.Send(msg)
 		return
 	}
@@ -43,7 +43,7 @@ func GetHandler(bot *tgbotapi.BotAPI, update tgbotapi.Update, logger *zap.Logger
 
 	// Если рецептов нет
 	if len(recipes) == 0 {
-		msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Рецептов пока нет 😕")
+		msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Маршрутов пока нет 😕")
 		bot.Send(msg)
 		return
 	}
@@ -57,7 +57,7 @@ func GetHandler(bot *tgbotapi.BotAPI, update tgbotapi.Update, logger *zap.Logger
 		}
 
 		message := fmt.Sprintf(
-			"🍽 *%s*\n\n📋 *Ингредиенты:*\n%s\n\n📝 *Рецепт:*\n%s",
+			"🍽 *%s*\n\n📋 *Интересные места:*\n%s\n\n📝 *Маршрут:*\n%s",
 			recipe.Title,
 			strings.Join(ingredients, "\n"),
 			recipe.RecipeText,

@@ -16,7 +16,7 @@ func QuestionsHandler(bot *tgbotapi.BotAPI, update tgbotapi.Update, logger *zap.
 
 	inlineKeyboard := tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("Как посмотреть мои рецепты с сайта?", "q1"),
+			tgbotapi.NewInlineKeyboardButtonData("Как посмотреть мои маршруты с сайта?", "q1"),
 		),
 		tgbotapi.NewInlineKeyboardRow(
 			tgbotapi.NewInlineKeyboardButtonData("Кто автор сайта и бота?", "q2"),
